@@ -27,6 +27,7 @@
 #include "MMA8452.h"
 #include <avr/sleep.h>
 
+//#include "i2c.h"
 #define RDV_DEBUG
 
 //PIN DEFINITIONS
@@ -130,6 +131,13 @@ void setup()
 #endif
 	
 	acc1.setBitrate(I2C_RATE);
+	
+	//while(1){
+		//i2cSendStart();
+		//i2cSendByte(0xAA);
+		//i2cSendStop();
+		//delayMicroseconds(100);
+	//}
 	
 #ifdef RDV_DEBUG
 	Serial.print("I2C Speed: ");
@@ -366,11 +374,11 @@ void initialize_pins()
 	//outputs
 	DDRB =  (1 << LED_CNTL) | (1 << CE_REG1) | (1 << CE_REG);
 	DDRC =  (1 << BR_CNTL);
-	DDRD =  (1 << TRIGGER) | (1 << SOFT_SDA) | (1 << SOFT_SCL);
+	DDRD =  (1 << TRIGGER);
 	//inputs
 	DDRB =  ~(1 << INT1_ACC);
 	DDRC =  ~(1 << VCC_SOLAR) & ~(1 << BATT_READ) & ~(1 << INT2_ACC);
-	DDRD =  ~(1 << ECHO_3V3);
+	DDRD =  ~(1 << ECHO_3V3) & ~(1 << SOFT_SDA) & ~(1 << SOFT_SCL);
 	//pwm setup
 	//TODO
 }

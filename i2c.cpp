@@ -16,12 +16,14 @@ void i2cInit(void){
 
 void i2cSetBitrate(unsigned short bitrateKHz){
 	if(bitrateKHz == 100)
-		I2C_DELAY_US = 20;
+		I2C_DELAY_US = 4;
 	else
-		I2C_DELAY_US = 5;
+		I2C_DELAY_US = 1;
 }
 
 void i2cWriteBit(unsigned char bit){
+	unsigned short timeout;
+	timeout = 0;
 	if(bit){
 		I2C_SDA_H();
 	}
@@ -31,7 +33,8 @@ void i2cWriteBit(unsigned char bit){
 	delayMicroseconds(I2C_DELAY_US);
 	I2C_SCL_H();
 	while((I2C_PORT & (1 << SOFT_SCL)) == 0){
-		//add in timeout if needed 
+		if(timeout++ > 500)
+			break;
 	}
 	delayMicroseconds(I2C_DELAY_US);
 	I2C_SCL_L();
@@ -39,11 +42,14 @@ void i2cWriteBit(unsigned char bit){
 
 unsigned char i2cReadBit(void){
 	unsigned char bit;
+	unsigned short timeout;
+	timeout = 0;
 	I2C_SDA_H();
 	delayMicroseconds(I2C_DELAY_US);
 	I2C_SCL_H();
 	while((I2C_PORT & (1 << SOFT_SCL)) == 0){
-		//add in timeout if needed 
+		if(timeout++ > 500)
+		break;
 	}
 	bit = I2C_PORT & (1 << SOFT_SDA);
 	delayMicroseconds(I2C_DELAY_US);
@@ -55,10 +61,11 @@ void i2cSendStart(void){
 	I2C_DDR &= ~((1 << SOFT_SDA) | (1 << SOFT_SCL)); 
 	I2C_SDA_L();
 	delayMicroseconds(I2C_DELAY_US);
-	I2C_SDA_L();
+	I2C_SCL_L();
 }
 
 void i2cSendStop(void){
+	delayMicroseconds(I2C_DELAY_US);
 	I2C_SCL_H();
 	delayMicroseconds(I2C_DELAY_US);
 	I2C_SDA_H();
