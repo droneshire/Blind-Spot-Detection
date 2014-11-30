@@ -5,7 +5,6 @@
 MMA8452::MMA8452(unsigned char address)
 {
 	mAddress = address;
-	i2cInit();
 }
 
 void MMA8452::MMA8452Active(void)

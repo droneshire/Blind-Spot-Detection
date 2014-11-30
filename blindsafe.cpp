@@ -130,6 +130,8 @@ void setup()
 	while(!Serial);
 #endif
 	
+	acc1.setBitrate(I2C_RATE);
+	
 	//while(1){
 		//i2cSendStart();
 		//i2cSendByte(0xAA);
@@ -137,7 +139,6 @@ void setup()
 		//delayMicroseconds(100);
 	//}
 	
-	acc1.setBitrate(I2C_RATE);
 #ifdef RDV_DEBUG
 	Serial.print("I2C Speed: ");
 	Serial.println(I2C_RATE);

@@ -8,11 +8,9 @@
 #include "Arduino.h"
 
 static unsigned char I2C_DELAY_US;
-static unsigned char started;
 
 void i2cInit(void){
 	//release the bus
-	started = false;
 	I2C_DDR &= ~((1 << SOFT_SDA) | (1 << SOFT_SCL)); 
 }
 
@@ -60,22 +58,10 @@ unsigned char i2cReadBit(void){
 }
 
 void i2cSendStart(void){
-	unsigned short timeout;
-	timeout = 0;
-	if(started){
-		I2C_SDA_H();
-		delayMicroseconds(I2C_DELAY_US);
-		I2C_SCL_H();
-		while((I2C_PORT & (1 << SOFT_SCL)) == 0){
-			if(timeout++ > 500)
-			break;
-		}
-		delayMicroseconds(I2C_DELAY_US);
-	}
+	I2C_DDR &= ~((1 << SOFT_SDA) | (1 << SOFT_SCL)); 
 	I2C_SDA_L();
 	delayMicroseconds(I2C_DELAY_US);
 	I2C_SCL_L();
-	started = true;
 }
 
 void i2cSendStop(void){
@@ -84,7 +70,6 @@ void i2cSendStop(void){
 	delayMicroseconds(I2C_DELAY_US);
 	I2C_SDA_H();
 	delayMicroseconds(I2C_DELAY_US);
-	started = false;
 }
 
 
