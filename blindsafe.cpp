@@ -128,17 +128,16 @@ void setup()
 #ifdef RDV_DEBUG
 	Serial.begin(115200);
 	while(!Serial);
-	delay(100);
+	delay(10);
 #endif
-	
+	acc1.setBitrate(I2C_RATE);
 	//while(1){
 		//i2cSendStart();
 		//i2cSendByte(0xAA);
 		//i2cSendStop();
-		//delayMicroseconds(100);
+		//delay(100);
 	//}
 	
-	acc1.setBitrate(I2C_RATE);
 #ifdef RDV_DEBUG
 	Serial.println();
 	Serial.println("I2C Speed: ");
@@ -178,6 +177,7 @@ void setup()
 	Serial.println("Setting into factory mode...");
 	delay(2500);
 #endif
+
 	set_factory_mode();
 }
 

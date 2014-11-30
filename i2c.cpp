@@ -35,7 +35,7 @@ void i2cWriteBit(unsigned char bit){
 	delayMicroseconds(I2C_DELAY_US);
 	I2C_SCL_H();
 	while((I2C_PORT & (1 << SOFT_SCL)) == 0){
-		if(timeout++ > 500)
+		if(timeout++ > 90)
 			break;
 	}
 	delayMicroseconds(I2C_DELAY_US);
@@ -50,8 +50,8 @@ unsigned char i2cReadBit(void){
 	delayMicroseconds(I2C_DELAY_US);
 	I2C_SCL_H();
 	while((I2C_PORT & (1 << SOFT_SCL)) == 0){
-		if(timeout++ > 500)
-		break;
+		if(timeout++ > 90)
+			break;
 	}
 	bit = I2C_PORT & (1 << SOFT_SDA);
 	delayMicroseconds(I2C_DELAY_US);
@@ -67,8 +67,8 @@ void i2cSendStart(void){
 		delayMicroseconds(I2C_DELAY_US);
 		I2C_SCL_H();
 		while((I2C_PORT & (1 << SOFT_SCL)) == 0){
-			if(timeout++ > 500)
-			break;
+			if(timeout++ > 90)
+				break;
 		}
 		delayMicroseconds(I2C_DELAY_US);
 	}
@@ -85,8 +85,8 @@ void i2cSendStop(void){
 	delayMicroseconds(I2C_DELAY_US);
 	I2C_SCL_H();
 	while((I2C_PORT & (1 << SOFT_SCL)) == 0){
-		if(timeout++ > 500)
-		break;
+		if(timeout++ > 90)
+			break;
 	}
 	delayMicroseconds(I2C_DELAY_US);
 	I2C_SDA_H();
@@ -94,13 +94,33 @@ void i2cSendStop(void){
 	started = false;
 }
 
+unsigned char i2cWaitForAck(void){
+	unsigned short timeout;
+	timeout = 0;
+	I2C_SDA_H(); //release the SDA line
+	delayMicroseconds(I2C_DELAY_US);
+	I2C_SCL_H();
+	while(!(I2C_PORT & (1 << SOFT_SCL))){
+		if(timeout++ > 90)
+			break;
+	}
+	timeout = 0;
+	while((I2C_PORT & (1 << SOFT_SDA))){
+		if(timeout++ > 90)
+			return 0;	//did not receive ack
+	}
+	return 1;	//received an ack
+}
 
-void i2cSendByte(unsigned char data){
+
+unsigned char i2cSendByte(unsigned char data){
 	unsigned char i;
 	for(i = 0; i < 8; i++){
 		i2cWriteBit(data & 0x80);
 		data <<= 1;
 	}
+	//return i2cWaitForAck();
+	return 1;
 }
 
 unsigned char i2cReceiveByte(unsigned char ackFlag){

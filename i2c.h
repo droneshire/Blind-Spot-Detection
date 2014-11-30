@@ -39,8 +39,9 @@ void i2cWriteBit(unsigned char bit);
 unsigned char i2cReadBit(void);
 void i2cSendStart(void);
 void i2cSendStop(void);
+unsigned char i2cWaitForAck(void);
 
-void i2cSendByte(unsigned char data);
+unsigned char i2cSendByte(unsigned char data);
 unsigned char  i2cReceiveByte(unsigned char ackFlag);
 
 #endif /* I2C_H_ */
