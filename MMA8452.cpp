@@ -19,6 +19,11 @@ void MMA8452::MMA8452Standby(void)
 	writeRegister(CTRL_REG1, c & ~(0x01));
 }
 
+void MMA8452::setBitrate(unsigned short bitrate)
+{
+	i2cSetBitrate(bitrate);
+}
+
 void MMA8452::writeRegister(unsigned char address, unsigned char data)
 {
   i2cSendStart();
@@ -53,10 +58,10 @@ unsigned char MMA8452::readRegister(uint8_t address)
 
   i2cSendByte((mAddress<<1)|0x01); // Write 0xB5
   //i2cWaitForComplete();
-  i2cReceiveByte(true);
+  //i2cReceiveByte(true);
   //i2cWaitForComplete();
 
-  data = i2cGetReceivedByte();	// Get MSB result
+  data = i2cReceiveByte(true);	// Get MSB result
   //i2cWaitForComplete();
   i2cSendStop();
 
@@ -82,7 +87,7 @@ void MMA8452::readRegisters(unsigned char address, int i, unsigned char * dest)
   //i2cWaitForComplete();
   for (int j=0; j<i; j++)
   {
-    i2cReceiveByte(true);
+    //i2cReceiveByte(true);
     //i2cWaitForComplete();
     //dest[j] = i2cGetReceivedByte(); // Get MSB result
 	dest[j] = i2cReceiveByte(true);

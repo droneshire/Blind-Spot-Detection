@@ -44,8 +44,8 @@
 #define TRIGGER		PORTD6	//OUTPUT
 
 //BIT-BANG I2C PINS
-#define SOFT_SCL	PORTD0	//INOUT
-#define SOFT_SDA	PORTD1	//INOUT
+#define SOFT_SCL	PORTD4	//INOUT
+#define SOFT_SDA	PORTD3	//INOUT
 
 /************************************************************************/
 //ACCELEROMETER CONSTANTS: these all need to be translated to attributes
@@ -57,6 +57,7 @@
 #define ASLP_TIMEOUT 			10		// Sleep timeout value until SLEEP ODR if no activity detected 640ms/LSB
 #define MOTION_THRESHOLD		16		// 0.063g/LSB for MT interrupt (16 is minimum to overcome gravity effects)
 #define MOTION_DEBOUNCE_COUNT 	1		// IN LP MODE, TIME STEP IS 160ms/COUNT
+#define I2C_RATE				100
 
 #define NUM_AXIS 3
 #define NUM_ACC_DATA (DATARATE * NUM_AXIS)
@@ -78,7 +79,7 @@ typedef enum{
 /************************************************************************/
 //PROTOTYPES
 /************************************************************************/
-void initialize(void);
+void initialize_pins(void);
 long read_batt(void);
 void clear_acc_ints(void);
 void disable_int(uint8_t pcie);
@@ -112,12 +113,7 @@ MMA8452 acc1 = MMA8452(ACC1_ADDR);
 void setup()
 {
 	//initialize the pins
-	
-	
-#ifdef RDV_DEBUG
-	Serial.begin(115200);
-	while(!Serial);
-#endif
+	initialize_pins();
 	
 	sei();								//ENABLE EXTERNAL INTERRUPT FOR WAKEUP
 	got_slp_wake = false;
@@ -127,6 +123,18 @@ void setup()
 	_sleep_active = false;
 	
 	intCount = 0;
+	
+#ifdef RDV_DEBUG
+	Serial.begin(115200);
+	while(!Serial);
+#endif
+	
+	acc1.setBitrate(I2C_RATE);
+	
+#ifdef RDV_DEBUG
+	Serial.print("I2C Speed: ");
+	Serial.println(I2C_RATE);
+#endif
 	
 	if (acc1.readRegister(WHO_AM_I) == 0x2A) 						// WHO_AM_I should always be 0x2A
 	{
@@ -353,7 +361,7 @@ void clear_acc_ints()
 //# Returns: 		Nothing
 //#
 //#//END_FUNCTION_HEADER////////////////////////////////////////////////////////
-void initialize()
+void initialize_pins()
 {
 	//outputs
 	DDRB =  (1 << LED_CNTL) | (1 << CE_REG1) | (1 << CE_REG);

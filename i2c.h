@@ -9,9 +9,9 @@
 #define I2C_H_
 
 #ifndef SOFT_SDA
-#define SOFT_SDA PORTD0
+#define SOFT_SDA PORTD3
 #ifndef SOFT_SCL
-#define SOFT_SCL PORTD1
+#define SOFT_SCL PORTD4
 #endif
 #endif
 
@@ -29,22 +29,18 @@
 	I2C_DDR &= ~(1 << SOFT_SCL);\
 	I2C_PORT |= (1 << SOFT_SCL);
 #define I2C_SCL_L()\
-	I2C_DDR &= ~(1 << SOFT_SCL);\
+	I2C_DDR |= (1 << SOFT_SCL);\
 	I2C_PORT &= ~(1 << SOFT_SCL);
 
 void i2cInit(void);
-void i2cSetBitrate(unsigned char bitrateKHz);
+void i2cSetBitrate(unsigned short bitrateKHz);
 
 void i2cWriteBit(unsigned char bit);
 unsigned char i2cReadBit(void);
 void i2cSendStart(void);
 void i2cSendStop(void);
 
-void i2cWaitForComplete(void);
-
 void i2cSendByte(unsigned char data);
 unsigned char  i2cReceiveByte(unsigned char ackFlag);
-
-void delay_ms(unsigned short x);
 
 #endif /* I2C_H_ */

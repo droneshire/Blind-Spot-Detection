@@ -7,59 +7,82 @@
 #include "i2c.h"
 #include "Arduino.h"
 
-static unsigned char i2c_delay;
+static unsigned char I2C_DELAY_US;
 
 void i2cInit(void){
-	
+	//release the bus
+	I2C_DDR &= ~((1 << SOFT_SDA) | (1 << SOFT_SCL)); 
 }
 
-void i2cSetBitrate(unsigned char bitrateKHz){
+void i2cSetBitrate(unsigned short bitrateKHz){
 	if(bitrateKHz == 100)
-		i2c_delay = 20;
+		I2C_DELAY_US = 20;
 	else
-		i2c_delay = 5;
-	
+		I2C_DELAY_US = 5;
 }
 
 void i2cWriteBit(unsigned char bit){
-	
+	if(bit){
+		I2C_SDA_H();
+	}
+	else{
+		I2C_SDA_L();
+	}
+	delayMicroseconds(I2C_DELAY_US);
+	I2C_SCL_H();
+	while((I2C_PORT & (1 << SOFT_SCL)) == 0){
+		//add in timeout if needed 
+	}
+	delayMicroseconds(I2C_DELAY_US);
+	I2C_SCL_L();
 }
 
 unsigned char i2cReadBit(void){
 	unsigned char bit;
-	
-	
+	I2C_SDA_H();
+	delayMicroseconds(I2C_DELAY_US);
+	I2C_SCL_H();
+	while((I2C_PORT & (1 << SOFT_SCL)) == 0){
+		//add in timeout if needed 
+	}
+	bit = I2C_PORT & (1 << SOFT_SDA);
+	delayMicroseconds(I2C_DELAY_US);
+	I2C_SCL_L();
 	return bit ? 1 : 0;
 }
 
 void i2cSendStart(void){
-	
+	I2C_DDR &= ~((1 << SOFT_SDA) | (1 << SOFT_SCL)); 
+	I2C_SDA_L();
+	delayMicroseconds(I2C_DELAY_US);
+	I2C_SDA_L();
 }
 
 void i2cSendStop(void){
-	
+	I2C_SCL_H();
+	delayMicroseconds(I2C_DELAY_US);
+	I2C_SDA_H();
+	delayMicroseconds(I2C_DELAY_US);
 }
 
-void i2cWaitForComplete(void){
-	
-}
 
 void i2cSendByte(unsigned char data){
-	
+	unsigned char i;
+	for(i = 0; i < 8; i++){
+		i2cWriteBit(data & 0x80);
+		data <<= 1;
+	}
 }
 
 unsigned char i2cReceiveByte(unsigned char ackFlag){
-	
-}
-
-void delay_ms(unsigned short x)
-{
-	unsigned short y, z;
-	for ( ; x > 0 ; x--){
-		for ( y = 0 ; y < 90 ; y++){
-			for ( z = 0 ; z < 6 ; z++){
-				asm volatile ("nop");
-			}
-		}
+	unsigned char data, i;
+	data =0;
+	for(i = 0; i < 8; i++){
+		data |= i2cReadBit();
+		data <<= 1;
 	}
+	
+	i2cWriteBit(ackFlag ? 0 : 1);
+	delayMicroseconds(I2C_DELAY_US);
+	return data;
 }
