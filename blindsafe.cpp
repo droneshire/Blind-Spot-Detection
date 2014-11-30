@@ -27,7 +27,7 @@
 #include "MMA8452.h"
 #include <avr/sleep.h>
 
-//#include "i2c.h"
+#include "i2c.h"
 #define RDV_DEBUG
 
 //PIN DEFINITIONS
