@@ -49,7 +49,7 @@ unsigned char MMA8452::readRegister(uint8_t address)
   i2cSendStart();
   //i2cWaitForComplete();
 
-  i2cSendByte((mAddress<<1)); // Write 0xB4
+  i2cSendByte((mAddress<<1)); // Write 0x3C
   //i2cWaitForComplete();
 
   i2cSendByte(address);	// Write register address
@@ -57,14 +57,14 @@ unsigned char MMA8452::readRegister(uint8_t address)
 
   i2cSendStart();
 
-  i2cSendByte((mAddress<<1)|0x01); // Write 0xB5
+  i2cSendByte((mAddress<<1)|0x01); // Write 0x3D
   //i2cWaitForComplete();
   //i2cReceiveByte(true);
   //i2cWaitForComplete();
 
   data = i2cReceiveByte(true);	// Get MSB result
   //i2cWaitForComplete();
-  i2cSendStop();
+  //i2cSendStop();
 
   //cbi(TWCR, TWEN);	// Disable TWI
   //sbi(TWCR, TWEN);	// Enable TWI
