@@ -26,6 +26,7 @@
 #include "NewPing.h"
 #include "MMA8452.h"
 #include <avr/sleep.h>
+#include <util/delay.h>
 
 #include "i2c.h"
 #define RDV_DEBUG
@@ -123,28 +124,21 @@ void setup()
 	_sleep_inactive = false;
 	_sleep_active = false;
 	
-	intCount = 0;
 	
 #ifdef RDV_DEBUG
 	Serial.begin(115200);
 	while(!Serial);
-	delay(10);
+	Serial.flush();	 //clear the buffer before sleeping, otherwise can lock up the pipe
+	delay(1000);
 #endif
-	acc1.setBitrate(I2C_RATE);
 	//while(1){
 		//i2cSendStart();
 		//i2cSendByte(0xAA);
 		//i2cSendStop();
 		//delay(100);
 	//}
-	
-#ifdef RDV_DEBUG
-	Serial.println();
-	Serial.println("I2C Speed: ");
-	Serial.println(I2C_RATE);
-#endif
-	
-	if (acc1.readRegister(WHO_AM_I) == 0x2A) 						// WHO_AM_I should always be 0x2A
+	unsigned char temp = acc1.readRegister(WHO_AM_I);
+	if (temp== 0x2A) 						// WHO_AM_I should always be 0x2A
 	{
 		accel_on = true;
 
@@ -155,6 +149,7 @@ void setup()
 	else
 	{
 #ifdef RDV_DEBUG
+		Serial.println(temp);
 		Serial.println("Could not connect to MMA8452Q");
 #endif
 		accel_on = false;
@@ -177,7 +172,7 @@ void setup()
 	Serial.println("Setting into factory mode...");
 	delay(2500);
 #endif
-
+	while(1);
 	set_factory_mode();
 }
 
