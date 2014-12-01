@@ -8,13 +8,8 @@
 #ifndef I2C_H_
 #define I2C_H_
 
-#ifndef SOFT_SDA
-#define SOFT_SDA PORTD3
-#ifndef SOFT_SCL
-#define SOFT_SCL PORTD4
-#endif
-#endif
-
+#define SOFT_SDA	PORTD7
+#define SOFT_SCL	PORTD6
 #define I2C_DDR		DDRD
 #define I2C_PORT	PORTD
 #define I2C_PIN		PIND	

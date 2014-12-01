@@ -5,7 +5,7 @@
 MMA8452::MMA8452(unsigned char address)
 {
 	mAddress = address;
-	i2cInit();
+	i2c_init();
 }
 
 void MMA8452::MMA8452Active(void)
@@ -20,84 +20,47 @@ void MMA8452::MMA8452Standby(void)
 	writeRegister(CTRL_REG1, c & ~(0x01));
 }
 
-void MMA8452::setBitrate(unsigned short bitrate)
+unsigned char MMA8452::writeRegister(unsigned char address, unsigned char data)
 {
-	i2cSetBitrate(bitrate);
-}
-
-void MMA8452::writeRegister(unsigned char address, unsigned char data)
-{
-  i2cSendStart();
-  //i2cWaitForComplete();
-
-  i2cSendByte((mAddress<<1)); // Write 0xB4
-  //i2cWaitForComplete();
-
-  i2cSendByte(address);	// Write register address
-  //i2cWaitForComplete();
-
-  i2cSendByte(data);
-  //i2cWaitForComplete();
-
-  i2cSendStop();
+  i2c_send_start();
+  if(!i2c_send_byte((mAddress<<1))) //; // write 0xB4
+	return ~0u;
+  if(!i2c_send_byte(address))	// Write register address
+	return ~0u;
+  i2c_send_byte(data);
+  i2c_send_stop();
+  return 1;
 }
 
 unsigned char MMA8452::readRegister(uint8_t address)
 {
-  unsigned char data;
-
-  i2cSendStart();
-  //i2cWaitForComplete();
-
-  i2cSendByte((mAddress<<1)); // Write 0x3C
-  //i2cWaitForComplete();
-
-  i2cSendByte(address);	// Write register address
-  //i2cWaitForComplete();
-
-  i2cSendStart();
-
-  i2cSendByte((mAddress<<1)|0x01); // Write 0x3D
-  //i2cWaitForComplete();
-  //i2cReceiveByte(true);
-  //i2cWaitForComplete();
-
-  data = i2cReceiveByte(true);	// Get MSB result
-  //i2cWaitForComplete();
-  //i2cSendStop();
-
-  //cbi(TWCR, TWEN);	// Disable TWI
-  //sbi(TWCR, TWEN);	// Enable TWI
-
+  unsigned char data = 0;
+  i2c_send_start();
+  if(!i2c_send_byte((mAddress<<1))) //; // write 0xB4
+	return ~0u;
+  if(!i2c_send_byte(address))	// Write register address
+	return ~0u;
+  i2c_send_start();
+  if(!i2c_send_byte((mAddress<<1)|0x01)) // Write 0x3D
+	return ~0u;
+  data = i2c_receive_byte(true);	// Get MSB result
+  i2c_send_stop();
   return data;
 }
 
 void MMA8452::readRegisters(unsigned char address, int i, unsigned char * dest)
 {
-  i2cSendStart();
-  //i2cWaitForComplete();
+  i2c_send_start();
+  i2c_send_byte((mAddress<<1)); // write 0xB4
+  i2c_send_byte(address);	// write register address
+  i2c_send_start();
+  i2c_send_byte((mAddress<<1)|0x01); // write 0xB5
 
-  i2cSendByte((mAddress<<1)); // write 0xB4
-  //i2cWaitForComplete();
-
-  i2cSendByte(address);	// write register address
-  //i2cWaitForComplete();
-
-  i2cSendStart();
-  i2cSendByte((mAddress<<1)|0x01); // write 0xB5
-  //i2cWaitForComplete();
   for (int j=0; j<i; j++)
   {
-    //i2cReceiveByte(true);
-    //i2cWaitForComplete();
-    //dest[j] = i2cGetReceivedByte(); // Get MSB result
-	dest[j] = i2cReceiveByte(true);
+	dest[j] = i2c_receive_byte(true);
   }
-  //i2cWaitForComplete();
-  i2cSendStop();
-
-  //cbi(TWCR, TWEN); // Disable TWI
-  //sbi(TWCR, TWEN); // Enable TWI
+  i2c_send_stop();
 }
 
 void MMA8452::readAccelData(int * destination)
@@ -151,7 +114,6 @@ void MMA8452::initMMA8452(unsigned char fsr, unsigned char dr, unsigned char sr,
     writeRegister(FF_MT_THS, mt);		//MOTION DETECTION THRESHOLDS 
     writeRegister(FF_MT_COUNT, mdc);  	//TIME MOTION NEEDS TO BE 
 										//PRESENT ABOVE THE THRESHOLD BEFORE INTERRUPT CAN BE ASSERTED
-	
     MMA8452Active();
 }
 

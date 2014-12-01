@@ -10,7 +10,13 @@
 
 static unsigned char started;
 
-void SDA_delay() { volatile int v; int i; for (i=0; i < SCL_SDA_DELAY; i++) v; }
+inline void SDA_delay() { 
+	asm volatile ("nop");
+	asm volatile ("nop");
+	asm volatile ("nop");
+	asm volatile ("nop");
+	asm volatile ("nop");
+}
 	
 void i2c_init(void){
 	//release the bus
@@ -19,27 +25,29 @@ void i2c_init(void){
 	I2C_SDA_H();
 }
 
-void i2cDisable(void){
+void i2c_disable(void){
 	I2C_DDR &= ~(1 << SOFT_SCL);
 	I2C_DDR &= ~(1 << SOFT_SDA);
 }
 
-void i2cWriteBit(unsigned char bit){
+void i2c_write_bit(unsigned char bit){
 	if(bit){
 		I2C_SDA_H();
 	}
 	else{
 		I2C_SDA_L();
 	}
+	_delay_us(SCL_SDA_DELAY);	//MAY REMOVE
 	I2C_SCL_H();
 	_delay_us(I2C_DELAY);
 	I2C_SCL_L();
 	_delay_us(I2C_DELAY);
 }
 
-unsigned char i2cReadBit(void){
+unsigned char i2c_read_bit(void){
 	unsigned char bit;
 	I2C_SDA_H();
+	_delay_us(SCL_SDA_DELAY);	//MAY REMOVE
 	I2C_SCL_H();
 	bit = READ_SDA();
 	_delay_us(I2C_DELAY);
@@ -74,10 +82,11 @@ void i2c_send_stop(void){
 unsigned char i2c_send_byte(unsigned char data){
 	unsigned char i;
 	for(i = 0; i < 8; i++){
-		i2cWriteBit((data & 0x80) != 0);
+		i2c_write_bit((data & 0x80) != 0);
 		data <<= 1;
 	}
 	I2C_SDA_H();
+	_delay_us(SCL_SDA_DELAY);	//MAY REMOVE
 	I2C_SCL_H();
 	if(READ_SDA())
 		return 0;
@@ -93,8 +102,7 @@ unsigned char i2c_receive_byte(unsigned char nack){
 	unsigned char data, bit;
 	data =0;
 	for(bit = 0; bit < 8; bit++){
-		data |= i2cReadBit();
-		data <<= 1;
+		data = (data << 1) | i2c_read_bit();
 	}
 	SET_SDA_OUT();
 	if(nack){
