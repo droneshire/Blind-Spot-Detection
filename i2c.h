@@ -45,8 +45,8 @@ void SDA_delay(void);
 	
 void i2c_init(void);
 
-void i2cWriteBit(unsigned char bit);
-unsigned char i2cReadBit(void);
+void i2c_write_bit(unsigned char bit);
+unsigned char i2c_read_bit(void);
 void i2c_send_start(void);
 void i2c_send_stop(void);
 
