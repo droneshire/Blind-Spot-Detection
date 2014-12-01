@@ -18,7 +18,7 @@ class MMA8452
 		MMA8452(unsigned char address);
 		void MMA8452Active(void);
 		void MMA8452Standby(void);
-		void writeRegister(unsigned char address, unsigned char data);
+		unsigned char writeRegister(unsigned char address, unsigned char data);
 		unsigned char readRegister(unsigned char address);
 		void readRegisters(unsigned char address, int i, unsigned char * dest);
 		void readAccelData(int * destination);

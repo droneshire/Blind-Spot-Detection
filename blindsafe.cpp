@@ -149,7 +149,8 @@ void setup()
 	else
 	{
 #ifdef RDV_DEBUG
-		Serial.println(temp);
+		Serial.print("0x");
+		Serial.println(temp, HEX);
 		Serial.println("Could not connect to MMA8452Q");
 #endif
 		accel_on = false;
