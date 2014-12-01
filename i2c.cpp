@@ -37,7 +37,7 @@ void i2c_write_bit(unsigned char bit){
 	else{
 		I2C_SDA_L();
 	}
-	_delay_us(SCL_SDA_DELAY);	//MAY REMOVE
+	//_delay_us(SCL_SDA_DELAY);	//MAY REMOVE
 	I2C_SCL_H();
 	_delay_us(I2C_DELAY);
 	I2C_SCL_L();
@@ -47,7 +47,7 @@ void i2c_write_bit(unsigned char bit){
 unsigned char i2c_read_bit(void){
 	unsigned char bit;
 	I2C_SDA_H();
-	_delay_us(SCL_SDA_DELAY);	//MAY REMOVE
+	//_delay_us(SCL_SDA_DELAY);	//MAY REMOVE
 	I2C_SCL_H();
 	bit = READ_SDA();
 	_delay_us(I2C_DELAY);
@@ -86,7 +86,7 @@ unsigned char i2c_send_byte(unsigned char data){
 		data <<= 1;
 	}
 	I2C_SDA_H();
-	_delay_us(SCL_SDA_DELAY);	//MAY REMOVE
+	//_delay_us(SCL_SDA_DELAY);	//MAY REMOVE
 	I2C_SCL_H();
 	if(READ_SDA())
 		return 0;

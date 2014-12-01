@@ -41,3 +41,24 @@ Icon
 Network Trash Folder
 Temporary Items
 .apdisk
+
+Debug/blindsafe.d
+Debug/blindsafe.o
+Debug/cyclops.eep
+Debug/cyclops.lss
+Debug/cyclops.map
+Debug/cyclops.srec
+Debug/i2c.o
+Debug/i2c.o
+Debug/i2c.o
+Debug/makedep.mk
+Debug/MMA8452.d
+Debug/MMA8452.o
+Debug/NewPing.d
+Debug/NewPing.o
+Debug/i2c.o
+*.o
+cyclops.cppproj
+Debug/cyclops.elf
+Debug/i2c.o
+Debug/i2c.o
