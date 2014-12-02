@@ -58,7 +58,10 @@ void MMA8452::readRegisters(unsigned char address, int i, unsigned char * dest)
 
   for (int j=0; j<i; j++)
   {
-	dest[j] = i2c_receive_byte(true);
+	if(j == i-1)
+		dest[j] = i2c_receive_byte(true);
+	else
+		dest[j] = i2c_receive_byte(false);
   }
   i2c_send_stop();
 }
