@@ -38,7 +38,7 @@
 #define INT1_ACC	PORTB2	//INPUT INTERRUPT MOTION DETECTION (PCIE0)
 #define VCC_SOLAR	PORTC0	//INPUT ADC 
 #define BATT_READ	PORTC1	//INPUT ADC 
-#define BR_CNTL		PORTC2	//OUTPUT
+#define BATT_READ_CNTL		PORTC2	//OUTPUT
 #define INT2_ACC	PORTC3	//INPUT INTERRUPT DATA READY (PCIE1)
 #define LED_CNTL	PORTD2	//OUTPUT PWM
 #define CE_REG1		PORTD4	//OUTPUT
@@ -47,6 +47,12 @@
 
 #define INT1_PCINT	PCINT2
 #define INT2_PCINT	PCINT11
+#define INT1_PCIE	PCIE0
+#define INT2_PCIE	PCIE1
+#define INT1_PCMSK	PCMSK0
+#define INT2_PCMSK	PCMSK1
+#define INT1_PIN	PINB
+#define INT2_PIN	PINC
 
 //BIT-BANG I2C PINS (define in i2c.h)
 #define SOFT_SCL	PORTD6	//INOUT
@@ -87,7 +93,7 @@ typedef enum{
 void init_accel(void);
 void initialize_pins(void);
 long read_batt(void);
-void clear_acc_ints(void);
+bool clear_acc_ints(void);
 void disable_int(uint8_t pcie);
 void enable_int(uint8_t pcie);
 void sleep_handler(bool still);
@@ -102,9 +108,9 @@ static volatile bool got_slp_wake;
 static volatile bool got_data_acc;
 static volatile bool _sleep;
 static volatile uint8_t intSource;
+static volatile bool _sleep_active;
 
 static bool accel_on;
-static bool _sleep_active;
 
 static int16_t accelCount[3];  				// Stores the 12-bit signed value
 static float accelG[3];  						// Stores the real accel value in g's
@@ -258,8 +264,9 @@ void loop()
 	if(_sleep)
 	{
 #ifdef RDV_DEBUG
+		Serial.print("Sleep Active = ");
+		Serial.println(_sleep_active);
 		Serial.flush();	 //clear the buffer before sleeping, otherwise can lock up the pipe
-		delay(10);		//NOTE: THIS WILL MESS UP FUNCTIONAL TIMING, JUST FOR DEBUGGING TO ENSURE FLUSH
 #endif
 		sleep_handler(_sleep_active);
 	}//if(got_slp_wake)
@@ -316,18 +323,23 @@ void sleep_handler(bool active)
 {
 	got_slp_wake = false;
 	got_data_acc = false;
-
 	set_sleep_mode(SLEEP_MODE_PWR_DOWN);
 	sleep_enable();
 	cli();
 	sleep_bod_disable();
-	enable_int(PCIE0);
-	active ? enable_int(PCIE1) : disable_int(PCIE1);	//if we want to sleep in between data reads AND when no motion occurs
-	clear_acc_ints();
+	enable_int(INT1_PCIE);
+	active ? enable_int(INT2_PCIE) : disable_int(INT2_PCIE);	//if we want to sleep in between data reads AND when no motion occurs
+	if(!clear_acc_ints()){
+		Serial.println("Clear failed");
+	}
+	else{
+		Serial.println("Clear succeed");
+	}
 	sei();
 	sleep_cpu();
 	sleep_disable();
-	enable_int(PCIE1);
+	if(!active)
+		enable_int(PCIE1);
 	_sleep = false;
 }
 
@@ -342,11 +354,14 @@ void sleep_handler(bool active)
 //# Returns: 		Nothing
 //#
 //#//END_FUNCTION_HEADER////////////////////////////////////////////////////////
-void clear_acc_ints()
+bool clear_acc_ints()
 {
-	accel.readRegister(INT_SOURCE);
-	accel.readRegister(FF_MT_SRC);
+	if(accel.readRegister(INT_SOURCE) == ~0u)
+		return false;
+	if(accel.readRegister(FF_MT_SRC) == ~0u)
+		return false;
 	accel.readAccelData(accelCount);
+	return true;
 }
 
 //#START_FUNCTION_HEADER//////////////////////////////////////////////////////
@@ -362,12 +377,21 @@ void initialize_pins()
 {
 	//outputs
 	DDRB =  (1 << CE_REG);
-	DDRC =  (1 << BR_CNTL);
+	DDRC =  (1 << BATT_READ_CNTL);
 	DDRD =  (1 << TRIGGER) | (1 << CE_REG1) | (1 << LED_CNTL);
-	//inputs
-	DDRB =  ~(1 << INT1_ACC);
-	DDRC =  ~(1 << VCC_SOLAR) & ~(1 << BATT_READ) & ~(1 << INT2_ACC);
-	DDRD =  ~(1 << ECHO_3V3) & ~(1 << SOFT_SDA) & ~(1 << SOFT_SCL);
+	PORTB = 0;	//TODO: may need to make CE_REG 1 to keep charging on?? or can do it later before first sleep
+	PORTC = 0;
+	PORTD = 0;
+	
+	//inputs	
+	DDRB &=  ~(1 << INT1_ACC);
+	PORTB |= (1 << INT1_ACC);	//activate pullups
+	
+	DDRC &=  ~((1 << VCC_SOLAR) | (1 << BATT_READ) | (1 << INT2_ACC));
+	PORTC |= (1 << INT2_ACC);	//only tri-state the interrupt, not the ADC pins
+	
+	DDRD &=  ~((1 << ECHO_3V3) | (1 << SOFT_SDA) | (1 << SOFT_SCL));
+	PORTD |= (1 << ECHO_3V3);	//activate pullups except on I2C pins
 	
 	//TODO: PWM SETUP
 }
@@ -385,28 +409,28 @@ void enable_int(uint8_t pcie)
 {
 	switch(pcie)
 	{
-		case PCIE0:
+		case INT1_PCIE:
 		{
-			PCMSK0 |= (1 << INT1_PCINT);	//INT1_ACC Interrupt
+			INT1_PCMSK |= (1 << INT1_PCINT);	//INT1_ACC Interrupt
 			break;
 		}
-		case PCIE1:
+		case INT2_PCIE:
 		{
-			PCMSK1 |= (1 << INT2_PCINT);	//INT2_ACC Interrupt
+			INT2_PCMSK |= (1 << INT2_PCINT);	//INT2_ACC Interrupt
 			break;
 		}
 		default:
 		{
-			PCMSK0 |= (1 << INT1_PCINT);
-			PCMSK1 |= (1 << INT2_PCINT);	
+			INT1_PCMSK |= (1 << INT1_PCINT);
+			INT2_PCMSK |= (1 << INT2_PCINT);	
 			break;
 		}
 	}
 	
-	if(pcie <= PCIE1)
+	if(pcie <= INT2_PCIE)
 		PCICR |= (1 << pcie);
 	else
-		PCICR |= ((1 << PCIE0) | (1 << PCIE1));
+		PCICR |= ((1 << INT1_PCIE) | (1 << INT2_PCIE));
 }
 
 
@@ -425,23 +449,23 @@ void disable_int(uint8_t pcie)
 	{
 		case PCIE0:
 		{
-			PCMSK0 &= ~(1 << INT1_PCINT);	//INT1_ACC Interrupt
+			INT1_PCMSK &= ~(1 << INT1_PCINT);	//INT1_ACC Interrupt
 			break;
 		}
 		case PCIE1:
 		{
-			PCMSK1 &= ~(1 << INT2_PCINT);	//INT2_ACC Interrupt
+			INT2_PCMSK &= ~(1 << INT2_PCINT);	//INT2_ACC Interrupt
 			break;
 		}
 		default:
 		{
-			PCMSK0 &= ~(1 << INT1_PCINT);	
-			PCMSK1 &= ~(1 << INT2_PCINT);	
+			INT1_PCMSK &= ~(1 << INT1_PCINT);	
+			INT2_PCMSK &= ~(1 << INT2_PCINT);	
 			break;
 		}
 	}
 	
-	if(pcie <= PCIE1)
+	if(pcie <= INT2_PCINT)
 		PCICR &= ~(1 << pcie);
 	else
 		PCICR = 0;
@@ -498,7 +522,7 @@ long read_batt()
 ISR(PCINT0_vect)
 {
 	cli();
-	if(digitalRead(INT1_ACC))
+	if((INT1_PIN & (1 << INT1_ACC)))
 	{
 		got_slp_wake = true;
 	}
@@ -518,7 +542,7 @@ ISR(PCINT0_vect)
 ISR(PCINT1_vect)
 {
 	cli();
-	if(digitalRead(INT2_ACC))
+	if((INT2_PIN & (1 << INT2_ACC)))
 	{
 		got_data_acc = true;
 	}
