@@ -39,7 +39,8 @@ C_SRCS +=  \
 ../blindsafe.cpp \
 ../i2c.cpp \
 ../MMA8452.cpp \
-../NewPing.cpp
+../NewPing.cpp \
+../Ultrasonic.cpp
 
 
 PREPROCESSING_SRCS += 
@@ -52,25 +53,29 @@ OBJS +=  \
 blindsafe.o \
 i2c.o \
 MMA8452.o \
-NewPing.o
+NewPing.o \
+Ultrasonic.o
 
 OBJS_AS_ARGS +=  \
 blindsafe.o \
 i2c.o \
 MMA8452.o \
-NewPing.o
+NewPing.o \
+Ultrasonic.o
 
 C_DEPS +=  \
 blindsafe.d \
 i2c.d \
 MMA8452.d \
-NewPing.d
+NewPing.d \
+Ultrasonic.d
 
 C_DEPS_AS_ARGS +=  \
 blindsafe.d \
 i2c.d \
 MMA8452.d \
-NewPing.d
+NewPing.d \
+Ultrasonic.d
 
 OUTPUT_FILE_PATH +=cyclops.elf
 
@@ -83,6 +88,8 @@ OUTPUT_FILE_DEP:= ./makedep.mk
 LIB_DEP+= 
 
 # AVR32/GNU C Compiler
+
+
 
 
 
