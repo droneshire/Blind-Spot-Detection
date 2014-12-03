@@ -20,11 +20,11 @@
     <OverrideVtor>false</OverrideVtor>
     <CacheFlash>true</CacheFlash>
     <ProgFlashFromRam>true</ProgFlashFromRam>
-    <RamSnippetAddress>0x20000000</RamSnippetAddress>
+    <RamSnippetAddress />
     <UncachedRange />
     <OverrideVtorValue />
     <BootSegment>2</BootSegment>
-    <eraseonlaunchrule>0</eraseonlaunchrule>
+    <eraseonlaunchrule>1</eraseonlaunchrule>
     <AsfFrameworkConfig>
       <framework-data>
         <options />
@@ -173,9 +173,6 @@
     <Compile Include="blindsafe.cpp">
       <SubType>compile</SubType>
     </Compile>
-    <Compile Include="defs.h">
-      <SubType>compile</SubType>
-    </Compile>
     <Compile Include="i2c.cpp">
       <SubType>compile</SubType>
     </Compile>
@@ -195,6 +192,12 @@
       <SubType>compile</SubType>
     </Compile>
     <Compile Include="NewPing.h">
+      <SubType>compile</SubType>
+    </Compile>
+    <Compile Include="Ultrasonic.cpp">
+      <SubType>compile</SubType>
+    </Compile>
+    <Compile Include="Ultrasonic.h">
       <SubType>compile</SubType>
     </Compile>
   </ItemGroup>

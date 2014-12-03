@@ -23,8 +23,8 @@
 
 #include "Arduino.h"
 #include "MMA8452REGS.h"
-#include "Ultrasonic.h"
 #include "NewPing.h"
+#include "Ultrasonic.h"
 #include "MMA8452.h"
 #include <avr/sleep.h>
 #include <util/delay.h>
@@ -32,12 +32,12 @@
 #define RDV_DEBUG
 
 /************************************************************************/
-//PIN/PORT DEFINITIONS: 
+//PIN/PORT DEFINITIONS:
 /************************************************************************/
 #define CE_REG			PORTB1	//OUTPUT SOLAR PANEL OUTPUT
 #define INT1_ACC		PORTB2	//INPUT INTERRUPT MOTION DETECTION (PCIE0)
-#define VCC_SOLAR		PORTC0	//INPUT ADC 
-#define BATT_READ		PORTC1	//INPUT ADC 
+#define VCC_SOLAR		PORTC0	//INPUT ADC
+#define BATT_READ		PORTC1	//INPUT ADC
 #define BATT_RD_CNTL	PORTC2	//OUTPUT
 #define INT2_ACC		PORTC3	//INPUT INTERRUPT DATA READY (PCIE1)
 #define LED_CNTL1		PORTD2	//OUTPUT PWM AMBER LED
@@ -56,7 +56,7 @@
 
 #define MAX_SONAR_DISTANCE 500
 #define MIN_SONAR_DISTANCE 100
-#define TRIGGER_PIN		6			
+#define TRIGGER_PIN		6
 #define ECHO_PIN		5
 //#define TRIGGER_PORT	PORTD
 //#define ECHO_PORT		PORTD
@@ -84,7 +84,7 @@
 #define SCALE					0x08	// Sets full-scale range to +/-2, 4, or 8g. Used to calc real g values.
 #define DATARATE				0x07	// 0=800Hz, 1=400, 2=200, 3=100, 4=50, 5=12.5, 6=6.25, 7=1.56
 #define SLEEPRATE				0x03	// 0=50Hz, 1=12.5, 2=6.25, 3=1.56
-#define ASLP_TIMEOUT 			10		// Sleep timeout value until SLEEP ODR if no activity detected 640ms/LSB
+#define ASLP_TIMEOUT 			5		// Sleep timeout value until SLEEP ODR if no activity detected 640ms/LSB
 #define MOTION_THRESHOLD		16		// 0.063g/LSB for MT interrupt (16 is minimum to overcome gravity effects)
 #define MOTION_DEBOUNCE_COUNT 	1		// IN LP MODE, TIME STEP IS 160ms/COUNT
 #define I2C_RATE				100
@@ -124,17 +124,15 @@ typedef struct battery_t{
 /************************************************************************/
 //PROTOTYPES
 /************************************************************************/
-//void handle_battery_mgmt(void);
-void ISR_notify_timer();
-void wake_motion_slp(void);
-bool check_still(void);
 void init_accelerometer(void);
 void initialize_pins(void);
+bool check_moving(void);
 long read_mcu_batt(void);
 bool clear_acc_ints(void);
 void disable_int(uint8_t pcie);
 void enable_int(uint8_t pcie);
 void deep_sleep_handler(bool still);
+void ISR_notify_timer(void);
 void setup(void);
 void loop(void);
 
@@ -145,21 +143,18 @@ void loop(void);
 static volatile bool got_slp_wake;
 static volatile bool got_data_acc;
 static volatile bool _sleep;
-static volatile bool time_up;
-static volatile uint8_t intSource;
 static volatile bool driving;
+static volatile bool time_up;
 static volatile uint16_t batt_counter;
+static volatile uint8_t intSource;
+
 static bool accel_on;
 
-static unsigned long usec;
-static float range;
 static int16_t accelCount[3];  				// Stores the 12-bit signed value
 static float accelG[3];  						// Stores the real accel value in g's
 AccOdr f_odr = (AccOdr)DATARATE;
 MMA8452 accel = MMA8452(ACCEL_ADDR);
-Ultrasonic ultrasonic(TRIGGER_PIN, ECHO_PIN);
 Battery battery;
-
 /************************************************************************/
 
 
@@ -179,8 +174,15 @@ void setup()
 	//initialize the pins
 	initialize_pins();
 	
+	sei();								//ENABLE EXTERNAL INTERRUPT FOR WAKEUP
+	got_slp_wake = false;
+	got_data_acc = false;
+	_sleep = false;
+	driving = false;
+	
 	//setup the led timer to 600ms
-	//NewPing::timer_ms(600, ISR_notify_timer);
+	NewPing::timer_ms(600, ISR_notify_timer);
+	NewPing::timer_stop();
 	
 	//initialize battery monitoring system
 	battery.battery_vcc = 0;
@@ -189,35 +191,30 @@ void setup()
 	battery.mcu_vcc = 0;
 	battery.brightness = 255;	//default to full brightness
 	batt_counter = 0;
-	//ADCSRA = 0;	//disable ADC
 	
-	sei();								//ENABLE EXTERNAL INTERRUPT FOR WAKEUP
-	got_slp_wake = false;
-	got_data_acc = false;
-	_sleep = false;
-	driving = false;
+	ADCSRA = 0;	//disable ADC
 	
-	
-#ifdef RDV_DEBUG
+	#ifdef RDV_DEBUG
 	Serial.begin(115200);
 	while(!Serial);
 	Serial.flush();	 //clear the buffer before sleeping, otherwise can lock up the pipe
 	delay(1000);
-#endif
+	#endif
 
+	
 	if (accel.readRegister(WHO_AM_I) == 0x2A) 						// WHO_AM_I should always be 0x2A
 	{
 		accel_on = true;
 
-#ifdef RDV_DEBUG
+		#ifdef RDV_DEBUG
 		Serial.println("MMA8452Q is on-line...");
-#endif
+		#endif
 	}
 	else
 	{
-#ifdef RDV_DEBUG
+		#ifdef RDV_DEBUG
 		Serial.println("Could not connect to MMA8452Q");
-#endif
+		#endif
 		accel_on = false;
 	}
 	
@@ -235,12 +232,12 @@ void setup()
 	Serial.print("ACC 1: ");
 	Serial.println(accel_on);
 	Serial.println("+++++++++++++++++++++++++++++");
-	//Serial.println("Setting into factory mode...");
-	delay(500);
 #endif
 	init_accelerometer();
+	delay(1500);
 	
 }
+
 
 //#START_FUNCTION_HEADER//////////////////////////////////////////////////////
 //#
@@ -256,121 +253,48 @@ void loop()
 	//ACCELEROMETER DATA IS READY
 	if (got_data_acc && accel_on)
 	{
-#ifdef RDV_DEBUG
-		Serial.print("Poop");
-#endif		
-		cli();
 		got_data_acc = false;
 		accel.readAccelData(accelCount);  // Read the x/y/z adc values, clears int
 		
 		//sequentially check for motion detection
-		if(INT1_PIN & (1 << INT1_ACC) & check_still())
-			driving = false;	//we will go through one more time before, maybe break out here?
-		else 
+		Serial.println((INT1_PIN & (1 << INT1_ACC)) ? "1" : "0");
+		
+		if((INT1_PIN & (1 << INT1_ACC)))
+			driving = check_moving();	//we will go through one more time before, maybe break out here?
+		else
 			driving = true;
 			
 #ifdef RDV_DEBUG
 		Serial.print("Driving: ");
 		Serial.println(driving ? "Yes" : "No");
-#endif
+#endif		
 		_sleep = true;
 		
-		if(++batt_counter > BATTERY_CHECK_INTERVAL)
-		{
-			batt_counter = 0;
-			//handle_battery_mgmt();
-#ifdef RDV_DEBUG
-			Serial.print("Batt counter: ");
-			Serial.println(batt_counter);
-#endif
-		}
-		
-		CE_REG1_PORT |= (1 << CE_REG1);	//enable power to sonar and LED
-		delayMicroseconds(5);	//TODO: may need to adjust delay here to optimize bringup time
-		disable_int(ALL_INTS);	
-		range = 0;
-		usec = ultrasonic.timing();
-		range = ultrasonic.convert(usec, ultrasonic.CM);
-#ifdef RDV_DEBUG
-		Serial.print("Distance: ");
-		Serial.print(range);
-		Serial.println("cm");
-#endif
-		if(range < MAX_SONAR_DISTANCE && range >= MIN_SONAR_DISTANCE) 
-		{
-#ifdef TWO_LEDS
-			if(Battery.battery_vcc < LOW_BATTERY)
-				LED2_PORT |= (1 << LED_CNTL2);
-			else
-				LED1_PORT |= (1 << LED_CNTL1);
-#else
-			LED1_PORT |= (1 << LED_CNTL1);
-#endif
-
-//TODO: brightness control
-//#ifdef BRIGHTNESS_CTNL
-//#ifdef TWO_LEDS
-			//if(Battery.battery_vcc < LOW_BATTERY)
-				//analogWrite(LED2_PIN, Battery.brightness);
-			//else
-				//analogWrite(LED1_PIN, Battery.brightness);
-//#else
-			//analogWrite(LED1_PIN, Battery.brightness);
-//#endif			
-//#endif
-		}
-		
-		//wait for timer to expire
-		time_up = false;
-		//TODO: can put POWER_SAVE_MODE type sleep here if IO can remain on
-		while(!time_up);
-		time_up = false;
-		
-		//turn off the led
-#ifdef TWO_LEDS
-		if(Battery.battery_vcc < LOW_BATTERY)
-			LED2_PORT &= ~(1 << LED_CNTL2);
-		else
-			LED1_PORT &= ~(1 << LED_CNTL1);
-#else
-		LED1_PORT &= ~(1 << LED_CNTL1);
-#endif
-		
-#ifdef RDV_DEBUG		
 		// Now we'll calculate the acceleration value into actual g's
 		for (uint16_t i=0; i<3; i++)
 		accelG[i] = (float) accelCount[i]/((1<<12)/(2*SCALE));  // get actual g value, this depends on scale being set
 		// Print out values
-
+		
+		#ifdef RDV_DEBUG
 		for (uint16_t i=0; i<NUM_AXIS; i++)
 		{
 			Serial.print(accelG[i], 4);  // Print g values
 			Serial.print("\t");  // tabs in between axes
 		}
 		Serial.println();
-#endif
-		sei();
-		deep_sleep_handler(driving);
+		#endif
 	}
-		
+	
 	//ACCELEROMETER CHANGED INTO SLEEP/AWAKE STATE
 	if(got_slp_wake)
 	{
-#ifdef RDV_DEBUG
-		Serial.print("Slpwake");
-#endif
 		got_slp_wake = false;
-		_sleep = check_still();
-		driving = false;		//sleep without waking up from data interrupt
+		driving = check_moving();
+		_sleep = true;		//go into driving state mode
 	}
-		
+	
 	if(_sleep)
 	{
-#ifdef RDV_DEBUG
-		Serial.print("Sleep Active = ");
-		Serial.println(driving);
-		Serial.flush();	 //clear the buffer before sleeping, otherwise can lock up the pipe
-#endif
 		deep_sleep_handler(driving);
 	}//if(got_slp_wake)
 
@@ -388,7 +312,7 @@ void loop()
 void init_accelerometer(){
 	
 	enable_int(ALL_INTS);
-#ifdef RDV_DEBUG
+	#ifdef RDV_DEBUG
 	Serial.println("Setting up accelerometers...");
 	Serial.print("Scale: ");
 	Serial.println(SCALE);
@@ -403,7 +327,7 @@ void init_accelerometer(){
 	Serial.print("Debounce count: ");
 	Serial.println(MOTION_DEBOUNCE_COUNT);
 	Serial.println("+++++++++++++++++++++++++++++");
-#endif
+	#endif
 	
 	accel.initMMA8452(SCALE, DATARATE, SLEEPRATE, ASLP_COUNT, MOTION_THRESHOLD, MOTION_DEBOUNCE_COUNT);
 }
@@ -416,39 +340,36 @@ void init_accelerometer(){
 //#					we only want to be woken up by BLE or movement again, not data
 //#					ready.
 //#
-//# Parameters:		still --> 	true = disable acc data interrupts
-//#								false = enable acc data interrupts
+//# Parameters:		driving --> 	true = disable acc data interrupts
+//#									false = enable acc data interrupts
 //#
 //# Returns: 		Nothing
 //#
 //#//END_FUNCTION_HEADER////////////////////////////////////////////////////////
-void deep_sleep_handler(bool active)
+void deep_sleep_handler(bool driving)
 {
 	got_slp_wake = false;
 	got_data_acc = false;
-	//ADCSRA = 0;	//disable ADC
 	set_sleep_mode(SLEEP_MODE_PWR_DOWN);
 	sleep_enable();
 	cli();
 	sleep_bod_disable();
-	enable_int(INT1_PCIE);
-	active ? enable_int(INT2_PCIE) : disable_int(INT2_PCIE);	//if we want to sleep in between data reads AND when no motion occurs
-	if(!clear_acc_ints()){
-		Serial.println("Clear failed");
+	if(driving)
+	{
+		enable_int(INT2_PCIE);
+		disable_int(INT1_PCIE);
 	}
-	else{
-		Serial.println("Clear succeed");
+	else
+	{
+		enable_int(INT1_PCIE);
+		disable_int(INT2_PCIE);
 	}
-	// turn off brown-out enable in software
-	//MCUCR = bit (BODS) | bit (BODSE);  // turn on brown-out enable select
-	//MCUCR = bit (BODS);        // this must be done within 4 clock cycles of above
+	if(!clear_acc_ints())
+		return;
 	sei();
 	sleep_cpu();
 	sleep_disable();
-	if(!active)
-		enable_int(PCIE1);
 	_sleep = false;
-	//TODO: enable brown out
 }
 
 //#START_FUNCTION_HEADER//////////////////////////////////////////////////////
@@ -469,7 +390,7 @@ bool clear_acc_ints()
 	if(accel.readRegister(FF_MT_SRC) == ~0u)
 		return false;
 	accel.readAccelData(accelCount);
-	return true;
+		return true;
 }
 
 //#START_FUNCTION_HEADER//////////////////////////////////////////////////////
@@ -483,7 +404,6 @@ bool clear_acc_ints()
 //#//END_FUNCTION_HEADER////////////////////////////////////////////////////////
 void initialize_pins()
 {
-	//TODO: change the port values to match the new architecture
 	//outputs
 	DDRB =  (1 << CE_REG);
 	DDRC =  (1 << BATT_RD_CNTL);
@@ -492,64 +412,17 @@ void initialize_pins()
 	PORTC = 0;
 	PORTD = 0;
 	
-	//inputs	
+	//inputs
 	DDRB &=  ~(1 << INT1_ACC);
 	PORTB |= (1 << INT1_ACC);	//activate pullups
 	
 	DDRC &=  ~((1 << VCC_SOLAR) | (1 << BATT_READ) | (1 << INT2_ACC));
-	PORTC |= (1 << INT2_ACC) | (1 << BATT_READ) | (1 << INT2_ACC);	
+	PORTC |= (1 << INT2_ACC);	//only tri-state the interrupt, not the ADC pins
 	
 	DDRD &=  ~((1 << ECHO_3V3) | (1 << SOFT_SDA) | (1 << SOFT_SCL));
 	PORTD |= (1 << ECHO_3V3);	//activate pullups except on I2C pins
 	
 	//TODO: PWM SETUP
-}
-
-//#START_FUNCTION_HEADER//////////////////////////////////////////////////////
-//#
-//# Description: 	Is called every time the device comes out of sleep in 
-//#					the parked/idle state
-//#
-//# Parameters:		None
-//#
-//# Returns: 		Nothing
-//#
-//#//END_FUNCTION_HEADER////////////////////////////////////////////////////////
-void wake_motion_slp()
-{	
-	//detect daylight, read battery and execute power management
-	//handle_battery_mgmt();
-	//turn off LED IO
-#ifdef TWO_LEDS
-	if(Battery.battery_vcc < LOW_BATTERY)
-		LED2_PORT &= ~(1 << LED_CNTL2);
-	else
-		LED1_PORT &= ~(1 << LED_CNTL1);
-#else
-	LED1_PORT &= ~(1 << LED_CNTL1);
-#endif
-	
-		
-}
-
-//#START_FUNCTION_HEADER//////////////////////////////////////////////////////
-//#
-//# Description: 	Handles all battery management, including controlling the 
-//#					solar voltage output and daylight/brightness detection, as well
-//#					as the battery power level indication
-//#
-//# Parameters:		None
-//#
-//# Returns: 		Nothing
-//#
-//#//END_FUNCTION_HEADER////////////////////////////////////////////////////////
-void handle_battery_mgmt()
-{
-	//need to turn on ADC
-	//sense brightness on solar
-	//read battery voltage
-	//turn off solar if fully charged
-	//turn off ADC
 }
 
 //#START_FUNCTION_HEADER//////////////////////////////////////////////////////
@@ -561,14 +434,14 @@ void handle_battery_mgmt()
 //# Returns: 		Nothing
 //#
 //#//END_FUNCTION_HEADER////////////////////////////////////////////////////////
-bool check_still()
+bool check_moving()
 {
 	bool still = false;
 	intSource= accel.readRegister(INT_SOURCE) & 0xFE; //we don't care about the data interrupt here
 	accel.readRegister(FF_MT_SRC);	//CLEAR MOTION INTERRUPT
 #ifdef RDV_DEBUG
-	Serial.print("INT 1: 0x");
-	Serial.println(intSource, HEX);
+		Serial.print("INT 1: 0x");
+		Serial.println(intSource, HEX);
 #endif
 	switch(intSource)
 	{
@@ -582,58 +455,20 @@ bool check_still()
 			Serial.println(sysmod);
 #endif
 			if(sysmod == 0x02)    		//SLEEP MODE
-			still = true;
+				still = true;
 			else if(sysmod == 0x01)  	//WAKE MODE
-			still = false;
+				still = false;
 			break;
 		}
 		case 0x04:						//MOTION INTERRUPT
-		default:
-		break;
+			default:
+			break;
 	}
-#ifdef RDV_DEBUG
-	Serial.println("Clearing interrupts...");
-#endif
 	clear_acc_ints();			//clear interrupts at the end of this handler
-	
-	return still;
+
+	return (still ? false : true);
 }
 
-//#START_FUNCTION_HEADER//////////////////////////////////////////////////////
-//#
-//# Description: 	Reads the internal bandgap to get an accurate battery power
-//#					level reading.
-//#
-//# Parameters:		None
-//#
-//# Returns: 		Nothing
-//#
-//#//END_FUNCTION_HEADER////////////////////////////////////////////////////////
-long read_mcu_batt()
-{
-	// Read 1.1V reference against AVcc
-	// set the reference to Vcc and the measurement to the internal 1.1V reference
-	cli();
-	uint8_t ADC_state = ADMUX;
-	
-	ADMUX = _BV(REFS0) | _BV(MUX3) | _BV(MUX2) | _BV(MUX1);
-	
-	delay(2); // Wait for Vref to settle
-	ADCSRA |= _BV(ADSC); // Start conversion
-	while (ADCSRA & _BV(ADSC));
-	
-	uint8_t low  = ADCL; // must read ADCL first - it then locks ADCH
-	uint8_t high = ADCH; // unlocks both
-	
-	long result = (high<<8) | low;
-	
-	result = 1125300L / result; // Calculate Vcc (in mV); 1125300 = 1.1*1023*1000
-	
-	ADMUX = ADC_state;
-	sei();
-	
-	return result; // Vcc in millivolts
-}
 //#START_FUNCTION_HEADER//////////////////////////////////////////////////////
 //#
 //# Description: 	Enables the corresponding interrupt bank.
@@ -660,7 +495,7 @@ void enable_int(uint8_t pcie)
 		default:
 		{
 			INT1_PCMSK |= (1 << INT1_PCINT);
-			INT2_PCMSK |= (1 << INT2_PCINT);	
+			INT2_PCMSK |= (1 << INT2_PCINT);
 			break;
 		}
 	}
@@ -697,8 +532,8 @@ void disable_int(uint8_t pcie)
 		}
 		default:
 		{
-			INT1_PCMSK &= ~(1 << INT1_PCINT);	
-			INT2_PCMSK &= ~(1 << INT2_PCINT);	
+			INT1_PCMSK &= ~(1 << INT1_PCINT);
+			INT2_PCMSK &= ~(1 << INT2_PCINT);
 			break;
 		}
 	}
@@ -708,6 +543,42 @@ void disable_int(uint8_t pcie)
 	else
 		PCICR = 0;
 	
+}
+
+//#START_FUNCTION_HEADER//////////////////////////////////////////////////////
+//#
+//# Description: 	Reads the internal bandgap to get an accurate battery power
+//#					level reading.
+//#
+//# Parameters:		None
+//#
+//# Returns: 		Nothing
+//#
+//#//END_FUNCTION_HEADER////////////////////////////////////////////////////////
+long read_mcu_batt()
+{
+	// Read 1.1V reference against AVcc
+	// set the reference to Vcc and the measurement to the internal 1.1V reference
+	cli();
+	uint8_t ADC_state = ADMUX;
+	
+	ADMUX = _BV(REFS0) | _BV(MUX3) | _BV(MUX2) | _BV(MUX1);
+	
+	delay(2); // Wait for Vref to settle
+	ADCSRA |= _BV(ADSC); // Start conversion
+	while (ADCSRA & _BV(ADSC));
+	
+	uint8_t low  = ADCL; // must read ADCL first - it then locks ADCH
+	uint8_t high = ADCH; // unlocks both
+	
+	long result = (high<<8) | low;
+	
+	result = 1125300L / result; // Calculate Vcc (in mV); 1125300 = 1.1*1023*1000
+	
+	ADMUX = ADC_state;
+	sei();
+	
+	return result; // Vcc in millivolts
 }
 
 //#START_FUNCTION_HEADER//////////////////////////////////////////////////////
@@ -746,10 +617,8 @@ ISR(PCINT1_vect)
 	cli();
 	if((INT2_PIN & (1 << INT2_ACC)))
 	{
-		#ifdef RDV_DEBUG
-		Serial.println("Got int2");
-		#endif
 		got_data_acc = true;
+		disable_int(INT1_PCIE);	//disable motion interrupt and sequential check instead
 	}
 	sei();
 }
