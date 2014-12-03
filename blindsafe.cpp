@@ -242,7 +242,6 @@ void setup()
 	
 }
 
-
 //#START_FUNCTION_HEADER//////////////////////////////////////////////////////
 //#
 //# Description: 	Main loop
@@ -326,8 +325,6 @@ void loop()
 		LED1_PORT &= ~(1 << LED_CNTL1);
 #endif
 		
-		deep_sleep_handler(driving);
-		
 #ifdef RDV_DEBUG		
 		// Now we'll calculate the acceleration value into actual g's
 		for (uint16_t i=0; i<3; i++)
@@ -341,44 +338,15 @@ void loop()
 		}
 		Serial.println();
 #endif
+
+		deep_sleep_handler(driving);
 	}
 		
 	//ACCELEROMETER CHANGED INTO SLEEP/AWAKE STATE
 	if(got_slp_wake)
 	{
 		got_slp_wake = false;
-		intSource= accel.readRegister(INT_SOURCE) & 0xFE; //we don't care about the data interrupt here
-		accel.readRegister(FF_MT_SRC);	//CLEAR MOTION INTERRUPT
-#ifdef RDV_DEBUG
-		Serial.print("INT 1: 0x");
-		Serial.println(intSource, HEX);
-#endif
-		switch(intSource)
-		{
-			case 0x84:		//MOTION AND SLEEP/WAKE INTERRUPT (if even possible?)
-			case 0x80:		//SLEEP/WAKE INTERRUPT
-			{
-				uint8_t sysmod = accel.readRegister(SYSMOD);
-				//accel.readRegister(FF_MT_SRC);	//CLEAR MOTION INTERRUPT
-#ifdef RDV_DEBUG
-				Serial.print("SYSMOD: 0x");
-				Serial.println(sysmod);
-#endif
-				if(sysmod == 0x02)    		//SLEEP MODE
-				_sleep = true;
-				else if(sysmod == 0x01)  	//WAKE MODE
-				_sleep = false;
-				break;
-			}
-			case 0x04:						//MOTION INTERRUPT
-			default:
-			break;
-		}
-#ifdef RDV_DEBUG
-		Serial.println("Clearing interrupts...");
-#endif
-		clear_acc_ints();			//clear interrupts at the end of this handler
-		driving = false;		//sleep without waking up from data interrupt
+		_sleep = check_still();
 	}
 		
 	if(_sleep)
@@ -599,9 +567,9 @@ void check_still()
 			Serial.println(sysmod);
 #endif
 			if(sysmod == 0x02)    		//SLEEP MODE
-			motion = true;
+			still = true;
 			else if(sysmod == 0x01)  	//WAKE MODE
-			motion = false;
+			still = false;
 			break;
 		}
 		case 0x04:						//MOTION INTERRUPT
