@@ -23,13 +23,13 @@
 
 #include "Arduino.h"
 #include "MMA8452REGS.h"
-#include "NewPing.h"
 #include "Ultrasonic.h"
 #include "MMA8452.h"
 #include <avr/sleep.h>
 #include <util/delay.h>
 
 #define RDV_DEBUG
+//#define RDV_DEBUG_ACC_DATA
 
 /************************************************************************/
 //PIN/PORT DEFINITIONS:
@@ -45,19 +45,19 @@
 //#define BRIGHTNESS_CTNL	//TODO: define this if you want to control brightness based on daylight
 #define LED_CNTL2		0	//OUTPUT PWM RED LED		//TODO: add this pin somewhere
 #define CE_REG1			PORTD4	//OUTPUT SENSOR AND LED OUTPUT
-#define ECHO_3V3		PORTD5	//INPUT
-#define TRIGGER			PORTD3	//OUTPUT
+#define ECHO_3V3		PORTD3	//INPUT
+#define TRIGGER			PORTD5	//OUTPUT
 
-#define CE_REG1_PORT	PORTB
-#define LED1_PORT		PORTD
-#define LED2_PORT		PORTD
-//#define LED1_PIN		ARDUINO PIN
-//#define LED2_PIN		ARDUINO PIN
+#define CE_REG1_PORT		PORTD
+#define CE_REG_PORT			PORTB
+#define LED1_PORT			PORTD
+#define LED2_PORT			PORTD
+#define BATT_RD_CNTL_PORT	PORTC
 
 #define MAX_SONAR_DISTANCE 500
 #define MIN_SONAR_DISTANCE 100
-#define TRIGGER_PIN		6
-#define ECHO_PIN		5
+//#define TRIGGER_PIN		5
+//#define ECHO_PIN		3
 //#define TRIGGER_PORT	PORTD
 //#define ECHO_PORT		PORTD
 //#define TRIGGER_DDR	DDRD
@@ -124,6 +124,7 @@ typedef struct battery_t{
 /************************************************************************/
 //PROTOTYPES
 /************************************************************************/
+void shut_down_sensor(void);
 void init_accelerometer(void);
 void initialize_pins(void);
 bool check_moving(void);
@@ -149,11 +150,14 @@ static volatile uint16_t batt_counter;
 static volatile uint8_t intSource;
 
 static bool accel_on;
+static unsigned long usec;
+static float range;
 
 static int16_t accelCount[3];  				// Stores the 12-bit signed value
 static float accelG[3];  						// Stores the real accel value in g's
 AccOdr f_odr = (AccOdr)DATARATE;
 MMA8452 accel = MMA8452(ACCEL_ADDR);
+Ultrasonic ultrasonic;
 Battery battery;
 /************************************************************************/
 
@@ -180,9 +184,7 @@ void setup()
 	_sleep = false;
 	driving = false;
 	
-	//setup the led timer to 600ms
-	NewPing::timer_ms(600, ISR_notify_timer);
-	NewPing::timer_stop();
+	shut_down_sensor();
 	
 	//initialize battery monitoring system
 	battery.battery_vcc = 0;
@@ -260,29 +262,95 @@ void loop()
 		Serial.println((INT1_PIN & (1 << INT1_ACC)) ? "1" : "0");
 		
 		if((INT1_PIN & (1 << INT1_ACC)))
+		{
 			driving = check_moving();	//we will go through one more time before, maybe break out here?
+			if(!driving)
+			{
+				shut_down_sensor();
+			}
+		}
 		else
 			driving = true;
 			
+		_sleep = true;
+		
+		if(++batt_counter > BATTERY_CHECK_INTERVAL)
+		{
+			batt_counter = 0;
+			//handle_battery_mgmt();	//TODO: battery management
+		}
+		
 #ifdef RDV_DEBUG
+		Serial.print("Batt counter: ");
+		Serial.println(batt_counter);
+#endif
+		
+		CE_REG1_PORT |= (1 << CE_REG1);	//enable power to sonar and LED
+		_delay_us(5);	//TODO: may need to adjust delay here to optimize bringup time
+		disable_int(ALL_INTS);
+		range = 0;
+		usec = ultrasonic.timing();
+		range = ultrasonic.convert(usec, ultrasonic.CM);
+		
+#ifdef RDV_DEBUG
+		Serial.print("Distance: ");
+		Serial.print(range);
+		Serial.print("cm, USEC: ");
+		Serial.println(usec);
+#endif
+		
+		if(range < MAX_SONAR_DISTANCE && range >= MIN_SONAR_DISTANCE)
+		{
+#ifdef TWO_LEDS
+			if(Battery.battery_vcc < LOW_BATTERY)
+				LED2_PORT |= (1 << LED_CNTL2);
+			else
+				LED1_PORT |= (1 << LED_CNTL1);
+#else
+			LED1_PORT |= (1 << LED_CNTL1);
+#endif
+
+			//TODO: brightness control
+			//#ifdef BRIGHTNESS_CTNL
+			//#ifdef TWO_LEDS
+			//if(Battery.battery_vcc < LOW_BATTERY)
+			//analogWrite(LED2_PIN, Battery.brightness);
+			//else
+			//analogWrite(LED1_PIN, Battery.brightness);
+			//#else
+			//analogWrite(LED1_PIN, Battery.brightness);
+			//#endif
+			//#endif
+			_delay_ms(600);	//TODO: some sort of sleep mode during this time?
+		}
+
+#ifdef TWO_LEDS
+		if(Battery.battery_vcc < LOW_BATTERY)
+			LED2_PORT &= ~(1 << LED_CNTL2);
+		else
+			LED1_PORT &= ~(1 << LED_CNTL1);
+#else
+		LED1_PORT &= ~(1 << LED_CNTL1);
+#endif
+	
+	
+#ifdef RDV_DEBUG_ACC_DATA
 		Serial.print("Driving: ");
 		Serial.println(driving ? "Yes" : "No");
-#endif		
-		_sleep = true;
 		
 		// Now we'll calculate the acceleration value into actual g's
 		for (uint16_t i=0; i<3; i++)
 		accelG[i] = (float) accelCount[i]/((1<<12)/(2*SCALE));  // get actual g value, this depends on scale being set
 		// Print out values
 		
-		#ifdef RDV_DEBUG
+
 		for (uint16_t i=0; i<NUM_AXIS; i++)
 		{
 			Serial.print(accelG[i], 4);  // Print g values
 			Serial.print("\t");  // tabs in between axes
 		}
 		Serial.println();
-		#endif
+#endif
 	}
 	
 	//ACCELEROMETER CHANGED INTO SLEEP/AWAKE STATE
@@ -290,6 +358,10 @@ void loop()
 	{
 		got_slp_wake = false;
 		driving = check_moving();
+		if(driving)
+		{
+			//handle_battery_mgmt();	//TODO: battery management
+		}
 		_sleep = true;		//go into driving state mode
 	}
 	
@@ -340,8 +412,8 @@ void init_accelerometer(){
 //#					we only want to be woken up by BLE or movement again, not data
 //#					ready.
 //#
-//# Parameters:		driving --> 	true = disable acc data interrupts
-//#									false = enable acc data interrupts
+//# Parameters:		driving --> 	false = disable acc data interrupts
+//#									true = enable acc data interrupts
 //#
 //# Returns: 		Nothing
 //#
@@ -423,6 +495,25 @@ void initialize_pins()
 	PORTD |= (1 << ECHO_3V3);	//activate pullups except on I2C pins
 	
 	//TODO: PWM SETUP
+}
+
+//#START_FUNCTION_HEADER//////////////////////////////////////////////////////
+//#
+//# Description: 	This powers down the ultrasonic and led power and turns off
+//#					the battery reading voltage divider
+//#
+//# Parameters:		None
+//#
+//# Returns: 		Nothing
+//#
+//#//END_FUNCTION_HEADER////////////////////////////////////////////////////////
+void shut_down_sensor()
+{
+	//turn off the LED and sensor/led power
+	LED1_PORT &= ~(1 << LED_CNTL1);
+	CE_REG1_PORT &= ~(1 << CE_REG1);
+	CE_REG_PORT |= (1 << CE_REG);
+	BATT_RD_CNTL_PORT &= ~(1 << BATT_RD_CNTL);
 }
 
 //#START_FUNCTION_HEADER//////////////////////////////////////////////////////
@@ -620,20 +711,5 @@ ISR(PCINT1_vect)
 		got_data_acc = true;
 		disable_int(INT1_PCIE);	//disable motion interrupt and sequential check instead
 	}
-	sei();
-}
-
-//#START_FUNCTION_HEADER//////////////////////////////////////////////////////
-//#
-//# Description: 	ISR for the newping timer that utilizes timer 2 to wake up
-//#
-//# Parameters:		None
-//#
-//# Returns: 		Nothing
-//#
-//#//END_FUNCTION_HEADER////////////////////////////////////////////////////////
-void ISR_notify_timer() {
-	cli();
-	time_up = true;
 	sei();
 }
