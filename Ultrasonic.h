@@ -31,6 +31,11 @@
 // Undefine COMPILE_STD_DEV if you don't want Standard Deviation.
 #define COMPILE_STD_DEV
 
+#define SONAR_TOUT  500000	//50ms timeout
+#define ECHO_BM     PORTD3
+#define ECHO_PIN	PIND
+#define TRIG_PORT	PORTD
+#define TRIG_PIN	PORTD5
 
 typedef struct bufferCtl
     {
@@ -43,7 +48,7 @@ typedef struct bufferCtl
 class Ultrasonic
     {
     public:
-    Ultrasonic(int tp, int ep);
+    Ultrasonic();
     long timing();
     float convert(long microsec, int metric);
     void setDivisor(float value, int metric);
@@ -57,8 +62,7 @@ class Ultrasonic
 #endif // COMPILE_STD_DEV
 
     private:
-    int _trigPin;
-    int _echoPin;
+
     float _cmDivisor;
     float _inDivisor;
 
@@ -67,6 +71,7 @@ class Ultrasonic
     BufCtl *_pBuffers;
     void _sampleUpdate(BufCtl *buf, float msec);
     void _freeBuffers();
+	unsigned long _pulseIn(uint8_t state, unsigned long timeout);
 #endif // COMPILE_STD_DEV
     };
 

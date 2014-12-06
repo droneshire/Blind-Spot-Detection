@@ -36,26 +36,27 @@
 #include <stdlib.h>
 #include <string.h>
 #include <Ultrasonic.h>
+#include <util/delay.h>
 
 
-Ultrasonic::Ultrasonic(int tp, int ep)
+Ultrasonic::Ultrasonic()
     {
-    pinMode(tp, OUTPUT);
-    pinMode(ep, INPUT);
-    _trigPin = tp;
-    _echoPin = ep;
+    //pinMode(tp, OUTPUT);
+    //pinMode(ep, INPUT);
+    //_trigPin = tp;
+    //_echoPin = ep;
     _cmDivisor = 27.6233;
     _inDivisor = 70.1633;
     }
 
 long Ultrasonic::timing()
     {
-    digitalWrite(_trigPin, LOW);
-    delayMicroseconds(2);
-    digitalWrite(_trigPin, HIGH);
-    delayMicroseconds(10);
-    digitalWrite(_trigPin, LOW);
-    return pulseIn(_echoPin, HIGH);
+    TRIG_PORT &= ~(1 << TRIG_PIN); //digitalWrite(_trigPin, LOW);
+    _delay_us(2);
+	TRIG_PORT |= (1 << TRIG_PIN); //digitalWrite(_trigPin, HIGH);
+    _delay_us(10);
+    TRIG_PORT &= ~(1 << TRIG_PIN); //digitalWrite(_trigPin, LOW);
+    return _pulseIn(HIGH, SONAR_TOUT);
     }
 
 float Ultrasonic::convert(long microsec, int metric)
@@ -192,4 +193,49 @@ void Ultrasonic::_freeBuffers()
         free(_pBuffers);
         }
     }
+	
+/* Measures the length (in microseconds) of a pulse on the pin; state is HIGH
+ * or LOW, the type of pulse to measure.  Works on pulses from 2-3 microseconds
+ * to 3 minutes in length, but must be called at least a few dozen microseconds
+ * before the start of the pulse. */
+unsigned long Ultrasonic::_pulseIn(uint8_t state, unsigned long timeout)
+{
+	// cache the port and bit of the pin in order to speed up the
+	// pulse width measuring loop and achieve finer resolution.  calling
+	// digitalRead() instead yields much coarser resolution.
+	uint8_t bit = (1 << ECHO_BM); //digitalPinToBitMask(pin);
+	//uint8_t port = digitalPinToPort(pin);
+	uint8_t stateMask = (state ? bit : 0);
+	unsigned long width = 0; // keep initialization out of time critical area
+	
+	// convert the timeout from microseconds to a number of times through
+	// the initial loop; it takes 16 clock cycles per iteration.
+	unsigned long numloops = 0;
+	unsigned long maxloops = microsecondsToClockCycles(timeout) / 16;
+	
+	// wait for any previous pulse to end
+	//while ((*portInputRegister(port) & bit) == stateMask)
+	while ((ECHO_PIN & bit) == stateMask)
+		if (numloops++ == maxloops)
+			return 0;
+	
+	// wait for the pulse to start
+	//while ((*portInputRegister(port) & bit) != stateMask)
+	while ((ECHO_PIN & bit) != stateMask)
+		if (numloops++ == maxloops)
+			return 0;
+	
+	// wait for the pulse to stop
+	while ((ECHO_PIN & bit) == stateMask) {
+		if (numloops++ == maxloops)
+			return 0;
+		width++;
+	}
+
+	// convert the reading to microseconds. The loop has been determined
+	// to be 20 clock cycles long and have about 16 clocks between the edge
+	// and the start of the loop. There will be some error introduced by
+	// the interrupt handlers.
+	return clockCyclesToMicroseconds(width * 21 + 16); 
+}
 #endif // COMPILE_STD_DEV
