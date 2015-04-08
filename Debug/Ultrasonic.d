@@ -30,7 +30,9 @@ Ultrasonic.d Ultrasonic.o: .././Ultrasonic.cpp \
  c:\program\ files\ (x86)\atmel\atmel\ toolchain\avr8\ gcc\native\3.4.1056\avr8-gnu-toolchain\lib\gcc\avr\4.8.1\include\stdarg.h \
  ../../../../../../../../Program\ Files\ (x86)/Arduino/hardware/arduino/cores/arduino/Printable.h \
  ../../../../../../../../Program\ Files\ (x86)/Arduino/hardware/arduino/cores/arduino/new.h \
- ../../../../../../../../Program\ Files\ (x86)/Arduino/hardware/arduino/variants/standard/pins_arduino.h
+ ../../../../../../../../Program\ Files\ (x86)/Arduino/hardware/arduino/variants/standard/pins_arduino.h \
+ c:\program\ files\ (x86)\atmel\atmel\ toolchain\avr8\ gcc\native\3.4.1056\avr8-gnu-toolchain\avr\include\util\delay.h \
+ c:\program\ files\ (x86)\atmel\atmel\ toolchain\avr8\ gcc\native\3.4.1056\avr8-gnu-toolchain\avr\include\util\delay_basic.h
 
 c:\program\ files\ (x86)\atmel\atmel\ toolchain\avr8\ gcc\native\3.4.1056\avr8-gnu-toolchain\avr\include\stdlib.h:
 
@@ -95,3 +97,7 @@ c:\program\ files\ (x86)\atmel\atmel\ toolchain\avr8\ gcc\native\3.4.1056\avr8-g
 ../../../../../../../../Program\ Files\ (x86)/Arduino/hardware/arduino/cores/arduino/new.h:
 
 ../../../../../../../../Program\ Files\ (x86)/Arduino/hardware/arduino/variants/standard/pins_arduino.h:
+
+c:\program\ files\ (x86)\atmel\atmel\ toolchain\avr8\ gcc\native\3.4.1056\avr8-gnu-toolchain\avr\include\util\delay.h:
+
+c:\program\ files\ (x86)\atmel\atmel\ toolchain\avr8\ gcc\native\3.4.1056\avr8-gnu-toolchain\avr\include\util\delay_basic.h:
